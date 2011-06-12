@@ -45,17 +45,17 @@ start_sshagent() {
 	load_sshagent_env
 }
 
-check_for_staled_sockets() {
+check_for_stalled_sockets() {
 	if [ -n "${SSH_AUTH_SOCK}" ]; then
 		for socket in ${keyninjadir}/ssh-agent.socket-*; do
 			if [ "${socket}" != "${SSH_AUTH_SOCK}" ]; then
-				staled_sockets+=( "${socket}" )
+				stalled_sockets+=( "${socket}" )
 			fi
 		done
 
-		if [ "${#staled_sockets[@]}" -gt '0' ]; then 
+		if [ "${#stalled_sockets[@]}" -gt '0' ]; then 
 			>&2 printf '\nWarning: Staled ssh-agent sockets detected:\n'
-			>&2 printf '%s\n' "${staled_sockets[@]}"
+			>&2 printf '%s\n' "${stalled_sockets[@]}"
 			>&2 printf 'Feel free to remove them.\n\n'
 		fi
 	fi
@@ -109,7 +109,7 @@ do_lock
 load_sshagent_env
 if [ -z "${SSH_AGENT_PID}" ] || ! is_running "${SSH_AGENT_PID}" "ssh-agent"; then
 	start_sshagent
-	check_for_staled_sockets
+	check_for_stalled_sockets
 	add_keys "$@"
 fi
 
