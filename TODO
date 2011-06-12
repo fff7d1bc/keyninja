@@ -1,0 +1,1 @@
+* Lock only ssh-agent is not running, after lock is release check again for a ssh-agent.

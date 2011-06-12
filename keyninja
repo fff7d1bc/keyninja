@@ -1,0 +1,119 @@
+#!/bin/bash
+
+keyninjadir="${HOME}/.keyninja"
+
+if ! [ -d "${keyninjadir}" ]; then
+	mkdir "${keyninjadir}" -m 0700
+fi
+
+trap 'echo -e "\nControl-C interrupt. Exiting..." >&2; if [ "${lockcreated}" = "true" ]; then rm -f "${keyninjadir}/lock"; fi; exit 1' 2
+
+unset SSH_AGENT_PID SSH_AUTH_SOCK
+
+is_running() {
+	# Check if $1 pid is running, if $2 is provided, check if proces name is $2.
+
+	local returncode='1'
+
+	if [ -n "$1" ]; then
+		kill -0 "$1" 2> /dev/null
+		returncode="$?"
+	fi
+
+	# if pid is running, then we can check pid's name.
+	if [ "${returncode}" = '0' ] && [ -n "$2" ]; then
+		if [ "$(< /proc/${1}/comm)" = "$2" ]; then
+			returncode='0'
+		else
+			returncode='1'			
+		fi
+	fi		
+
+	return "${returncode}"
+}
+
+load_sshagent_env() {
+	if [ -f "${keyninjadir}/ssh-agent.env" ]; then
+		. "${keyninjadir}/ssh-agent.env"
+	fi
+}
+
+start_sshagent() {
+	sshagent="$(ssh-agent -s -a ${keyninjadir}/ssh-agent.socket-${RANDOM})"
+	if [ "$?" != '0' ]; then echo 'Something went wrong with starting ssh-agent.' >&2; exit 1; fi
+	echo "${sshagent/echo Agent pid *;/}" > "${keyninjadir}/ssh-agent.env"
+	load_sshagent_env
+}
+
+check_for_staled_sockets() {
+	if [ -n "${SSH_AUTH_SOCK}" ]; then
+		for socket in ${keyninjadir}/ssh-agent.socket-*; do
+			if [ "${socket}" != "${SSH_AUTH_SOCK}" ]; then
+				staled_sockets+=( "${socket}" )
+			fi
+		done
+
+		if [ "${#staled_sockets[@]}" -gt '0' ]; then 
+			>&2 printf '\nWarning: Staled ssh-agent sockets detected:\n'
+			>&2 printf '%s\n' "${staled_sockets[@]}"
+			>&2 printf 'Feel free to remove them.\n\n'
+		fi
+	fi
+}
+
+add_keys() {
+	while [ "$#" -ge '1' ]; do
+		if [ -f "$1" ]; then
+			ssh-add "$1" 2> /dev/null
+		else
+			echo "Key '$1' does not exist."; exit 1 >&2
+		fi
+		shift
+	done
+}
+
+print_for_eval() {
+	echo "export SSH_AUTH_SOCK='${SSH_AUTH_SOCK}'"
+	echo "export SSH_AGENT_PID='${SSH_AGENT_PID}'"
+}
+
+
+do_lock() {
+	# locking.
+	lock_attempts='0'
+	while true; do
+		if [ -f "${keyninjadir}/lock" ]; then
+			if [ "${lock_attempts}" = '0' ]; then
+				# Display info about waiting for lock, in if statemant because we want print it only once.
+				echo "Waiting for a lock on ${keyninjadir}/lock ..." >&2
+			fi
+			((lock_attempts++))
+			sleep 1
+			if [ ${lock_attempts} -ge '3' ]; then
+				echo 'Giving up, propably we have a stale lock file.' >&2
+				echo 'Or maybe other keyninja process is running?' >&2
+				exit 1
+			fi
+		
+		else
+			touch "${keyninjadir}/lock"
+			lockcreated='true'
+			break
+		fi
+	done
+}
+
+# Main
+
+do_lock
+load_sshagent_env
+if [ -z "${SSH_AGENT_PID}" ] || ! is_running "${SSH_AGENT_PID}" "ssh-agent"; then
+	start_sshagent
+	check_for_staled_sockets
+	add_keys "$@"
+fi
+
+if [ -f "${keyninjadir}/lock" ]; then rm "${keyninjadir}/lock"; fi
+
+print_for_eval
+
