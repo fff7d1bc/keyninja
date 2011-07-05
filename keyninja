@@ -113,7 +113,7 @@ if [ -z "${SSH_AGENT_PID}" ] || ! is_running "${SSH_AGENT_PID}" "ssh-agent"; the
 	add_keys "$@"
 fi
 
-if [ -f "${keyninjadir}/lock" ]; then rm "${keyninjadir}/lock"; fi
+if [ -f "${keyninjadir}/lock" ] && [ "${lockcreated}" = 'true' ]; then rm "${keyninjadir}/lock"; fi
 
 print_for_eval
 
