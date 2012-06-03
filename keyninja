@@ -56,7 +56,8 @@ check_for_stalled_sockets() {
 		if [ "${#stalled_sockets[@]}" -gt '0' ]; then 
 			>&2 printf '\nWarning: Staled ssh-agent sockets detected:\n'
 			>&2 printf '%s\n' "${stalled_sockets[@]}"
-			>&2 printf 'Feel free to remove them.\n\n'
+			>&2 printf 'Removing them ...'
+			rm -fv "${stalled_sockets[@]}"
 		fi
 	fi
 }
