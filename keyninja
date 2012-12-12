@@ -78,34 +78,28 @@ print_for_eval() {
 	echo "export SSH_AGENT_PID='${SSH_AGENT_PID}'"
 }
 
-
 do_lock() {
-	# locking.
-	lock_attempts='0'
-	while true; do
-		if [ -f "${keyninjadir}/lock" ]; then
-			if [ "${lock_attempts}" = '0' ]; then
-				# Display info about waiting for lock, in if statemant because we want print it only once.
-				echo "Waiting for a lock on ${keyninjadir}/lock ..." >&2
-			fi
-			((lock_attempts++))
-			sleep 1
-			if [ ${lock_attempts} -ge '3' ]; then
-				echo 'Giving up, propably we have a stale lock file.' >&2
-				echo 'Or maybe other keyninja process is running?' >&2
-				exit 1
-			fi
-		
-		else
-			touch "${keyninjadir}/lock"
+	local lockfile="${keyninjadir}/lock"
+
+	count='0'
+	while : ; do
+		if ! test -f "${lockfile}" && ( set -o noclobber; echo "$$" > "${lockfile}") 2> /dev/null; then
 			lockcreated='true'
 			break
+		else
+			[ "${count}" = 0 ] && echo ">>> Waiting for release the lock file ${lockfile} ..." >&2
+			count="$((count+1))"
+			sleep 1
+		fi
+		if [ "${count}" -ge '3' ]; then
+			echo '>>> Giving up, propably we have a stale lock file.' >&2
+			echo '>>> Or maybe other keyninja process is running?' >&2
+			exit 1
 		fi
 	done
 }
 
 # Main
-
 do_lock
 load_sshagent_env
 if [ -z "${SSH_AGENT_PID}" ] || ! is_running "${SSH_AGENT_PID}" "ssh-agent"; then
